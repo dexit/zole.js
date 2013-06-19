@@ -1,0 +1,580 @@
+<!doctype html>
+<html>
+	<head>
+		<title>Zole</title>
+		<script src="/socket.io/socket.io.js"></script>
+		<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.6.4/jquery.min.js"></script>
+		
+<style>
+body {
+margin: 0 0 0 0;
+}
+
+#play {
+display: none;
+}
+
+#zole_canvas_info {
+z-index: 2;
+position:absolute;
+left:0px;
+top:455px;
+display: none;
+margin-left: 40px;
+margin-top: 0px;
+background-image:url('./cards/background.jpg');
+}
+
+#zole_canvas {
+z-index: 1;
+position:absolute;
+left:0px;
+top:0px;
+display: none;
+margin-left: 40px;
+margin-top: 0px;
+background-image:url('./cards/background.jpg');
+}	
+
+#create_room {
+display: none;
+}
+
+#login {
+margin-top: 150px;
+margin-left: 150px;
+}
+</style>
+<script>
+window.onload = function () {
+	var my_id;
+	var socket = io.connect('http://localhost:8080');
+	
+		socket.on('connect', function(){
+			$('#spelet').click(function () {
+				my_id = $("#nick").val();
+				socket.emit('adduser', my_id);
+				$('#login').css("display", "none");
+				$('#create_room').css("display", "block");
+			});
+		});
+		
+		socket.on('updateusers', function (data) {
+		
+			$('#users').empty();
+		
+			for (var i in data) {
+				$('#users').append('<li>'+ data[i] + '</li>');
+			}
+		});
+		
+		socket.on('update_rooms', function (data) {			
+			$('#rooms').empty();
+			for (var i in data) {
+				switch (data[i].length) {
+				case 2:
+					$('#rooms').append('<li>' + data[i][1] + ' - <input type="submit" val="'+data[i][0]+'" class="join_room"> - <input type="submit" val="'+data[i][0]+'" class="join_room"></li>');
+					break;
+				case 3:
+					$('#rooms').append('<li>' + data[i][1] + ' - '+ data[i][2] +' - <input type="submit" val="'+data[i][0]+'" class="join_room"></li>');
+					break; 
+				case 4:
+					$('#rooms').append('<li>' + data[i][1] + ' - '+ data[i][2] +' - '+data[i][3]+'</li>');
+					break;
+				}
+			}
+		});
+		
+		$('#create').click(function () {
+				var random_id = Math.floor(Math.random() * 99999);
+				socket.emit('create_room', random_id);
+		});
+		
+		$('.join_room').live("click", function (game_id) {
+				var game_id = $(this).attr("val");
+				socket.emit('join_room', game_id);
+		});
+
+socket.on('pre_start_game', function(game_id, kava, gajiens, user1, user2, izvele, izveles_id){
+			$('#play').css("display", "block");
+			$('#zole_canvas_info').css("display", "block");
+			$('#zole_canvas').css("display", "block");
+			$('#rooms').css("display", "none");
+			$('#users').css("display", "none");
+			$('#create').css("display", "none");
+
+			
+			draw(game_id, kava, '0', gajiens, user1, user2, izveles_id);
+			draw_user_info(user1, user2, gajiens, izvele);
+
+			if (izvele == my_id && izveles_id == 'start') {
+				draw_menu(game_id, kava, user1, user2, izveles_id);
+			}
+});
+	
+socket.once('start_game', function(game_id, kava, gajiens, user1, user2, izveles_id){
+			draw(game_id, kava, '0', gajiens, user1, user2, izveles_id);
+			draw_user_info(user1, user2, gajiens);
+});
+
+socket.on('pec_gajiena', function(game_id, kava, galds, gajiens, user1, user2, izveles_id, stikis){
+			draw(game_id, kava, galds, gajiens, user1, user2, izveles_id);
+			
+			if (stikis != 0) {
+				setTimeout(function(){
+					draw(game_id, kava, galds, gajiens, user1, user2, izveles_id, stikis);
+					draw_user_info(user1, user2, gajiens);
+				},900);
+								setTimeout(function(){
+					draw(game_id, kava, '0', gajiens, user1, user2, izveles_id);
+					draw_user_info(user1, user2);
+				},3000);
+			}
+			
+			draw_user_info(user1, user2, gajiens);
+});
+
+socket.on('kads_pagaja', function(game_id, pagaja, stikis){
+		socket.emit('paradit_info', my_id, game_id, pagaja, stikis);	
+});
+
+function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
+  if (typeof stroke == "undefined" ) {
+    stroke = true;
+  }
+  if (typeof radius === "undefined") {
+    radius = 8;
+  }
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+  if (stroke) {
+    ctx.stroke();
+  }
+  if (fill) {
+    ctx.fill();
+  }        
+}
+
+function draw_user_info(user1, user2, gajiens, izvele) {
+	var canvas = document.getElementById('zole_canvas').getContext('2d');
+	var xxxx;
+	var yyyy;
+	
+	if (user1 == gajiens || user1 == izvele) {
+		xxxx = 'yellow';
+		yyyy = '#eee';
+	} else if (user2 == gajiens || user2 == izvele) {
+		xxxx = '#eee';
+		yyyy = 'yellow';
+	}
+	
+	roundRect(canvas, 20,20,130,200);
+	canvas.fillStyle = 'rgba(255, 255, 255, 0.1)';
+	canvas.fill();
+	canvas.save();
+	canvas.lineWidth = 1;
+  	canvas.strokeStyle = xxxx;
+  	canvas.stroke();
+	canvas.restore();
+	
+	roundRect(canvas, 35,35,100,100);
+	canvas.fillStyle = 'rgba(255, 255, 255, 0.1)';
+	canvas.fill();
+
+	roundRect(canvas, 750,20,130,200);
+	canvas.fillStyle = 'rgba(255, 255, 255, 0.1)';
+	canvas.fill();
+	canvas.save();
+	canvas.lineWidth = 1;
+  	canvas.strokeStyle = yyyy;
+  	canvas.stroke();
+	canvas.restore();
+	
+	roundRect(canvas, 765,35,100,100);
+	canvas.fillStyle = 'rgba(255, 255, 255, 0.1)';
+	canvas.fill();
+	
+	canvas.fillStyle = "#fff";
+    canvas.font = "10pt verdana";
+    canvas.fillText(user1, 40, 155);
+
+	canvas.fillStyle = "#fff";
+    canvas.font = "10pt verdana";
+    canvas.fillText(user2, 770, 155);
+    
+    var canvas2 = document.getElementById('zole_canvas_info')
+    canvas2.width = canvas2.width;
+    var context2 = canvas2.getContext('2d');
+    
+	context2.fillStyle = "#fff";
+    context2.font = "11pt verdana";
+    context2.fillText(my_id, 600, 25);
+    
+    context2.fillStyle = "#fff";
+    context2.font = "11pt verdana";
+    context2.fillText(user1, 700, 25);
+    
+    context2.fillStyle = "#fff";
+    context2.font = "11pt verdana";
+    context2.fillText(user2, 800, 25);
+	
+}
+
+function draw_menu(game_id, kava, user1, user2, izveles_id){
+  var canvas = document.getElementById('zole_canvas').getContext('2d');
+  canvas.save();
+  roundRect(canvas, 255,85,320,220);
+  canvas.shadowOffsetX = 15;
+  canvas.shadowOffsetY = 15;
+  canvas.shadowBlur = 1;
+  canvas.shadowColor = "Black";
+  //canvas.rect(240,125,350,230);
+  canvas.fillStyle = 'rgba(255, 255, 255, 0.1)';
+  canvas.fill();
+  canvas.restore();
+  
+  canvas.beginPath();
+  canvas.moveTo(270,150);
+  canvas.lineTo(560,150);
+  canvas.lineWidth = 0.3;
+  canvas.strokeStyle = '#fff';
+  canvas.stroke();
+  canvas.beginPath();
+  canvas.moveTo(270,200);
+  canvas.lineTo(560,200);
+  canvas.lineWidth = 0.3;
+  canvas.strokeStyle = '#fff';
+  canvas.stroke();
+  canvas.beginPath();
+  canvas.moveTo(270,250);
+  canvas.lineTo(560,250);
+  canvas.lineWidth = 0.3;
+  canvas.strokeStyle = '#fff';
+  canvas.stroke();
+  
+  canvas.save();
+  
+  canvas.shadowOffsetX = 5;
+  canvas.shadowOffsetY = 5;
+  canvas.shadowBlur = 5;
+  canvas.shadowColor = "Black";
+  canvas.fillStyle = "#fff";
+  canvas.font = "17pt verdana";
+  canvas.fillText("Zole!", 390, 130);
+  canvas.fillText("Ņemt galdu", 365, 180);
+  canvas.fillText("Garām", 390, 230);
+  canvas.fillText("Mazā Zole", 370, 280);
+  canvas.restore();
+  
+
+  var elements = new Array();
+  
+        		
+  var elem = document.getElementById('zole_canvas'),
+  elemLeft = elem.offsetLeft,
+  elemTop = elem.offsetTop,
+  context = elem.getContext('2d')
+  
+  elem.addEventListener('click', function(event) {
+	  var x = event.pageX - elemLeft,
+	  y = event.pageY - elemTop;
+
+	  elements.forEach(function(element) {    			
+		  if (y > element.top && y < element.top + element.height 
+		  && x > element.left && x < element.left + element.width) {
+				if (izveles_id == 'start') {
+				socket.emit('izdarita_izvele', my_id, element.val_id, game_id);
+				elements = new Array();
+				}
+		  }
+	  });
+  }, false);
+  
+        elements.push({
+			width: 200,
+			height: 50,
+			top: 100,
+			left: 320,
+			val: 'Zole',
+			val_id: 1
+	  	});
+	  	
+	    elements.push({
+			width: 200,
+			height: 50,
+			top: 150,
+			left: 305,
+			val: 'Ņemt galdu',
+			val_id: 2
+	  	});
+	  	
+	  	elements.push({
+			width: 200,
+			height: 50,
+			top: 200,
+			left: 330,
+			val: 'Garām',
+			val_id: 3
+	  	});
+	  	
+	  	elements.push({
+			width: 200,
+			height: 50,
+			top: 250,
+			left: 300,
+			val: 'Mazā Zole',
+			val_id: 4
+	  	});
+}
+
+function draw (game_id, kava, galds, gajiens, user1, user2, izveles_id, stikis) {
+		var elements = new Array();
+			
+		var canvas = document.getElementById('zole_canvas');
+		canvas.width = canvas.width;
+      		var context = canvas.getContext('2d');
+      		
+      		var elem = document.getElementById('zole_canvas'),
+   				 elemLeft = elem.offsetLeft,
+    			 elemTop = elem.offsetTop,
+    			 context = elem.getContext('2d')
+
+			if (my_id == gajiens) {
+			
+				elem.addEventListener('click', function(event) {
+    			var x = event.pageX - elemLeft,
+       		 	y = event.pageY - elemTop;
+
+    			elements.forEach(function(element) {    			
+        			if (y > element.top && y < element.top + element.height 
+           			&& x > element.left && x < element.left + element.width) {
+           			
+				    var do_smth = function (izveles_id) {
+				    	if (izveles_id === 'start') {
+    					socket.emit('gajiens_izdarits', element.val, game_id, my_id,
+            			element.ar_id, element.masts);
+            			xx = 200; 
+        	    		xy = 200;        	
+        	    		elements = new Array();
+        	    		console.log(element.val);
+        	    		console.log(element.masts);
+        	    		} else {
+        	    			socket.emit('izdarita_izvele', my_id, izveles_id, game_id, element.vertiba, element.ar_id);
+        	    		}
+    				};
+           			
+           			var ir_1 = false;
+           			var ir_2 = false;
+           			var ir_3 = false;
+           			var ir_4 = false;
+           			
+           			var bb = galds[0][2];
+           			
+		       			if (typeof bb == 'undefined' || galds.length == 3) {
+		       				do_smth(izveles_id);
+		       			} else {
+		       				for (var i in kava) {
+				   				if (kava[i][2] == 1) {
+				   					ir_1 = true;
+				   				} else if (kava[i][2] == 2) {
+				   					ir_2 = true;
+				   				} else if (kava[i][2] == 3) {
+				   					ir_3 = true;
+				   				} else if (kava[i][2] == 4) {
+				   					ir_4 = true;
+				   				}
+				   			}
+				   			
+				   			switch (bb) {
+				   				case 1:
+				   					if (ir_1 == false) {
+				   						do_smth(izveles_id);
+				   					} else if (ir_1 == true && element.masts == 1) {
+				   						do_smth(izveles_id);
+				   					} else { }
+				   				break;
+				   				case 2:
+				   					if (ir_2 == false) {
+				   						do_smth(izveles_id);
+				   					} else if (ir_2 == true && element.masts == 2) {
+				   						do_smth(izveles_id);
+				   					} else { console.log('case 2'); }
+				   				break;
+				   				case 3:
+				   					if (ir_3 == false) {
+				   						do_smth(izveles_id);
+				   					} else if (ir_3 == true && element.masts == 3) {
+				   						do_smth(izveles_id);
+				   					} else { console.log('case 3'); }				   					
+				   				break;
+				   				case 4:
+				   					if (ir_4 == false) {
+				   						do_smth(izveles_id);
+				   					} else if (ir_4 == true && element.masts == 4) {
+				   						do_smth(izveles_id);
+				   					} else { console.log('case 4'); }
+				   				break;
+				   			}
+		       			}
+           			}
+    			});
+			}, false);
+		}
+      		   
+		// http://www.html5canvastutorials.com/tutorials/html5-canvas-image-loader/	
+			   
+		function loadHand(sources, callback) {
+        var images = {};
+        var loadedImages = 0;
+        var numImages = 0;
+        
+        for(var src in sources) {
+          numImages++;
+        }
+        
+        for(var src in sources) {
+          images[src] = new Image();
+          images[src].onload = function() {
+            if(++loadedImages >= numImages) {
+              callback(images);
+            }
+          };
+          images[src].src = sources[src];
+        }
+      }
+
+      var sources = [];
+      
+      var yy = 200;
+      
+      for (var a in kava) {
+      sources.push('./cards/'+ kava[a][0] +'.svg');    
+	  
+	  	 if (a != kava.length - 1) {
+	  		ew = 47.25;
+	 	 } else {
+	  		ew = 98.55;
+	 	 }	
+	  
+      elements.push({
+    	width: ew,
+    	height: 139,
+    	top: 349,
+    	left: yy,
+    	val: kava[a][0],
+    	ar_id: a,
+    	masts: kava[a][2],
+    	vertiba: kava[a][1],
+    	mjau: 'mjau'
+	  });
+	  
+	  	if (a != kava.length - 1) {
+	  		yy = yy + 47.25;
+	 	 } else {
+	  		yy = yy + 100;
+	 	 }	
+      }
+
+	  var xx = 200;
+      loadHand(sources, function(images) {
+      for (var i in sources) {
+      	context.drawImage(images[i], 260, 260, 400, 300, xx, 290, 200, 160);
+      	xx = xx + 47.25;
+      }
+      });       	
+      
+    //
+    
+function loadTable(sources_table, callback) {
+        var images = {};
+        var loadedImages = 0;
+        var numImages = 0;
+        
+        for(var src in sources_table) {
+          numImages++;
+        }
+        
+        for(var src in sources_table) {
+          images[src] = new Image();
+          images[src].onload = function() {
+            if(++loadedImages >= numImages) {
+              callback(images);
+            }
+          };
+          images[src].src = sources_table[src];
+        }
+      }
+      
+      var sources_table = [];
+      var xy;
+      
+      for (var b in galds) {
+      	sources_table.push('./cards/'+ galds[b][0] +'.svg');
+      }
+      
+      if (stikis) {
+      	  loadTable(sources_table, function(images) {
+      	  
+      	  		if (stikis == user1) {
+				  	var xy = 50;
+				  	var yx = -150;
+			  	} else if (stikis == user2) {
+				  	var xy = 420;
+				  	var yx = -150;
+			  	} else if (stikis == my_id) {
+				  	var xy = 200;
+				  	var yx = 0;
+			  	}
+      	  
+			  for (var i in sources_table) {  	
+			  	context.drawImage(images[i], xy, yx, 350, 500);
+			  	xy = xy + 40;
+			  }
+		  });
+      } else {
+		  loadTable(sources_table, function(images) {
+			  for (var i in sources_table) {
+			  	if (galds[i][1] == user1) {
+				  	var xy = 215;
+				  	var yx = -90;
+			  	} else if (galds[i][1] == user2) {
+				  	var xy = 325;
+				  	var yx = -90;
+			  	} else if (galds[i][1] == my_id) {
+				  	var xy = 270;
+				  	var yx = -30;
+			  	}  	
+			  	context.drawImage(images[i], xy, yx, 350, 500);
+			  }
+		  });
+      }
+			
+	// http://www.html5canvastutorials.com/tutorials/html5-canvas-image-loader/			
+			}
+	
+}
+</script>
+
+	</head>
+	<body>
+		<div id="login">
+			>> Nickname: <input id="nick" type="text" name="nick"> <input id="spelet" type="submit" value="Spēlēt!">
+		</div>
+		<div id="users"></div>
+		<div id="create_room"><input type="submit" id="create"></div>
+		<div id="rooms"></div>
+		<div id="play">
+			<canvas id="zole_canvas" width="900" height="450"></canvas>
+			<canvas id="zole_canvas_info" width="900" height="140"></canvas>
+		</div>
+	</body>
+</html>
